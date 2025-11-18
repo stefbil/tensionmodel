@@ -6,7 +6,7 @@ import time
 import random
 import uuid
 from datetime import datetime
-
+from google.auth.transport.requests import AuthorizedSession
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -18,15 +18,22 @@ SCOPE = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+
 def get_gsheet():
     creds_dict = st.secrets["gcp_service_account"]
-    credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
 
+    credentials = Credentials.from_service_account_info(
+        creds_dict,
+        scopes=SCOPE
+    )
+
+    authed_session = AuthorizedSession(credentials)
     client = gspread.Client(auth=credentials)
-    client.session = gspread.AuthorizedSession(credentials)
+    client.session = authed_session
 
     sheet = client.open_by_key(SHEET_ID).sheet1
     return sheet
+
 
 
 # PARTICIPANT ID
@@ -211,6 +218,7 @@ elif st.session_state.phase == "rating":
     render_rating()
 elif st.session_state.phase == "done":
     render_done()
+
 
 
 
