@@ -139,7 +139,7 @@ def render_intro():
 
     if st.button("Begin Experiment"):
         start_experiment()
-        st.experimental_rerun()
+
 
 
 # RATING
@@ -149,7 +149,6 @@ def render_rating():
 
     if idx >= total_tracks:
         st.session_state.phase = "done"
-        st.experimental_rerun()
         return
 
     track_label, filename = st.session_state.track_order[idx]
@@ -175,7 +174,6 @@ def render_rating():
             st.session_state.ratings = []
             st.session_state.last_slider_value = None
             st.session_state.slider_value = 0.5
-            st.experimental_rerun()
         return
 
     st.slider(
@@ -197,7 +195,6 @@ def render_rating():
         if st.session_state.current_track_idx >= total_tracks:
             st.session_state.phase = "done"
 
-        st.experimental_rerun()
 
 
 # UI
@@ -238,10 +235,9 @@ def render_done():
         st.session_state.ratings = []
         st.session_state.last_slider_value = None
         st.session_state.slider_value = 0.5
-        st.experimental_rerun()
 
 
-# ---------- MAIN ROUTER ----------
+# MAIN ROUTER
 if st.session_state.phase == "intro":
     render_intro()
 elif st.session_state.phase == "rating":
