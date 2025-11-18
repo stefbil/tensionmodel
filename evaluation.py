@@ -11,7 +11,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # GOOGLE SHEETS CONFIG
-SHEET_ID = "1ej1aYS1Ld5tvAMQpwXZA5wwwjzCi6roHaPP5NH51wTc"
+SHEET_ID = ${{ secrets.SHEET_ID }}
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -211,3 +211,4 @@ elif st.session_state.phase == "rating":
     render_rating()
 elif st.session_state.phase == "done":
     render_done()
+
