@@ -7,17 +7,30 @@ import random
 import uuid
 from datetime import datetime
 
-# -----------------------------------------
-# PARTICIPANT ID GENERATION
-# -----------------------------------------
+import gspread
+from google.oauth2.service_account import Credentials
+
+
+# GOOGLE SHEETS SETUP
+SHEET_ID = "1ej1aYS1Ld5tvAMQpwXZA5wwwjzCi6roHaPP5NH51wTc"
+SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
+
+def get_gsheet():
+    creds_dict = st.secrets["gcp_service_account"]
+    credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
+    client = gspread.authorize(credentials)
+    sheet = client.open_by_key(SHEET_ID).sheet1
+    return sheet
+
+
+# PARTICIPANT ID
 def generate_participant_id():
     date_str = datetime.now().strftime("%Y%m%d")
     short_uid = uuid.uuid4().hex[:4].upper()
     return f"P-{date_str}-{short_uid}"
 
-# -----------------------------------------
+
 # SESSION STATE INITIALIZATION
-# -----------------------------------------
 default_states = {
     "phase": "intro",
     "participant_id": None,
@@ -35,9 +48,8 @@ for key, val in default_states.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# -----------------------------------------
+
 # CONSTANTS
-# -----------------------------------------
 TRACKS = [
     ("Track 1", "buildup01.mp3"),
     ("Track 2", "buildup02.mp3"),
@@ -54,13 +66,9 @@ TRACKS = [
 ]
 
 AUDIO_DIR = "audio"
-DATA_DIR = "data"
-MASTER_CSV = os.path.join(DATA_DIR, "responses_master.csv")
-os.makedirs(DATA_DIR, exist_ok=True)
 
-# -----------------------------------------
+
 # HELPERS
-# -----------------------------------------
 def reset_slider_state():
     st.session_state.slider_value = 0.5
     st.session_state.last_slider_value = None
@@ -79,25 +87,6 @@ def start_experiment():
     reset_slider_state()
 
 
-def save_current_track_ratings():
-    if not st.session_state.ratings:
-        return
-
-    track_label, filename = st.session_state.track_order[st.session_state.current_track_idx]
-    participant = st.session_state.participant_id
-
-    df = pd.DataFrame(st.session_state.ratings)
-    df["participant"] = participant
-    df["track_label"] = track_label
-    df["track_file"] = filename
-    df = df[["participant", "track_label", "track_file", "time", "tension_rating"]]
-
-    if os.path.exists(MASTER_CSV):
-        df.to_csv(MASTER_CSV, mode="a", header=False, index=False)
-    else:
-        df.to_csv(MASTER_CSV, index=False)
-
-
 def record_slider_if_changed():
     if st.session_state.start_time is None:
         return
@@ -107,39 +96,54 @@ def record_slider_if_changed():
 
     if last is None or curr != last:
         elapsed = time.time() - st.session_state.start_time
-        st.session_state.ratings.append({"time": elapsed, "tension_rating": curr})
+        st.session_state.ratings.append({"time": elapsed, "tension": curr})
         st.session_state.last_slider_value = curr
 
 
-# -----------------------------------------
+def save_to_google_sheets():
+    """Append current track's ratings to Google Sheets."""
+    if not st.session_state.ratings:
+        return
+
+    sheet = get_gsheet()
+    track_label, filename = st.session_state.track_order[st.session_state.current_track_idx]
+
+    rows = []
+    for r in st.session_state.ratings:
+        rows.append([
+            st.session_state.participant_id,
+            track_label,
+            filename,
+            r["time"],
+            r["tension"]
+        ])
+
+    sheet.append_rows(rows, value_input_option="RAW")
+
+
 # INTRO SCREEN
-# -----------------------------------------
 def render_intro():
     st.title("EDM Tension Perception Test")
 
     st.markdown("""
-    You will listen to **12 EDM build-ups** and continuously rate **musical tension**.
+    You will rate tension while listening to 12 EDM build-ups.
 
-    ### NEW streamlined workflow:
-    - The **track loads automatically**
-    - The **slider appears immediately**
-    - **Audio playback begins the moment you touch the slider**
-    - You adjust the slider as tension rises/falls
-    - Click **Finish Track** when the audio ends
+    ### How it works:
+    - Slider appears immediately  
+    - Audio starts automatically **when you touch the slider**
+    - Slider movements are recorded in real time  
+    - Press **Finish Track** when the audio ends  
     """)
 
     if st.button("Begin Experiment"):
         start_experiment()
 
 
-# -----------------------------------------
-# RATING SCREEN (NEW BEHAVIOR)
-# -----------------------------------------
+# RATING SCREEN
 def render_rating():
     idx = st.session_state.current_track_idx
     total = len(st.session_state.track_order)
 
-    # Finished all
     if idx >= total:
         st.session_state.phase = "done"
         return
@@ -151,9 +155,7 @@ def render_rating():
     st.markdown(f"**Participant:** `{st.session_state.participant_id}`")
     st.markdown(f"**Track {idx+1}/{total}:** {track_label}")
 
-    # ----------------------------------------------------
-    # Handle autoplay AFTER slider first movement
-    # ----------------------------------------------------
+    # Autoplay audio after slider touch
     if st.session_state.audio_autoplay:
         st.audio(audio_path, autoplay=True)
     else:
@@ -161,42 +163,32 @@ def render_rating():
 
     st.success("Move the slider to begin playback and logging.")
 
-    # ----------------------------------------------------
-    # Slider always visible
-    # ----------------------------------------------------
-    new_slider_value = st.slider(
+    # Slider visible immediately
+    new_slider = st.slider(
         "Tension (low → high)",
         0.0, 1.0,
         value=st.session_state.slider_value,
         step=0.01
     )
-    st.session_state.slider_value = new_slider_value
+    st.session_state.slider_value = new_slider
 
-    # ----------------------------------------------------
-    # Detect first user interaction → start track + logging
-    # ----------------------------------------------------
+    # First slider movement,start timer and autoplay
     if not st.session_state.has_started_track:
-        # User moved slider for the first time →
         if st.session_state.slider_value != 0.5:
             st.session_state.start_time = time.time()
+            st.session_state.ratings = []
             st.session_state.has_started_track = True
             st.session_state.audio_autoplay = True
-            st.session_state.ratings = []
-            st.session_state.last_slider_value = None
 
-    # ----------------------------------------------------
-    # Sliding logs after start
-    # ----------------------------------------------------
     if st.session_state.has_started_track:
         record_slider_if_changed()
 
-    st.caption(f"Recorded samples so far: {len(st.session_state.ratings)}")
+    st.caption(f"Samples recorded: {len(st.session_state.ratings)}")
 
-    # ----------------------------------------------------
-    # Finish button
-    # ----------------------------------------------------
+    # Finish Track
     if st.button("Finish Track"):
-        save_current_track_ratings()
+        save_to_google_sheets()
+
         st.session_state.current_track_idx += 1
         st.session_state.start_time = None
         st.session_state.has_started_track = False
@@ -204,39 +196,20 @@ def render_rating():
         reset_slider_state()
 
 
-# -----------------------------------------
+
 # DONE SCREEN
-# -----------------------------------------
 def render_done():
     st.title("Experiment Complete 🎉")
+    st.markdown(f"Thank you! Your ID: **{st.session_state.participant_id}**")
 
-    st.markdown(f"""
-    Thank you!  
-    Participant ID: **`{st.session_state.participant_id}`**
-    """)
-
-    st.subheader("Admin Panel")
-    if os.path.exists(MASTER_CSV):
-        df = pd.read_csv(MASTER_CSV)
-        st.write(f"Total rows: {len(df)}")
-        st.dataframe(df.head())
-        st.download_button(
-            "Download CSV",
-            df.to_csv(index=False).encode("utf-8"),
-            "responses_master.csv",
-            "text/csv",
-        )
-    else:
-        st.info("No data yet.")
+    st.success("All data has been saved to Google Sheets.")
 
     if st.button("Start Another Participant"):
         for key, val in default_states.items():
             st.session_state[key] = val
 
 
-# -----------------------------------------
-# ROUTER
-# -----------------------------------------
+# ROUTING
 if st.session_state.phase == "intro":
     render_intro()
 elif st.session_state.phase == "rating":
