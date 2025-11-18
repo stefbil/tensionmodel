@@ -66,3 +66,4 @@ urllib3==2.5.0
 uv==0.9.3
 watchdog==6.0.0
 google-auth
+gspread==.2.1
