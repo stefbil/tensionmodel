@@ -17,10 +17,10 @@ SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
 
 def get_gsheet():
     creds_dict = st.secrets["gcp_service_account"]
-    credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPE)
-    client = gspread.authorize(credentials)
+    client = gspread.service_account_from_dict(creds_dict)
     sheet = client.open_by_key(SHEET_ID).sheet1
     return sheet
+
 
 
 # PARTICIPANT ID
@@ -216,3 +216,4 @@ elif st.session_state.phase == "rating":
     render_rating()
 elif st.session_state.phase == "done":
     render_done()
+
