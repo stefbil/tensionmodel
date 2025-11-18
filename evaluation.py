@@ -7,37 +7,37 @@ import random
 import uuid
 from datetime import datetime
 
+# -----------------------------------------
+# PARTICIPANT ID GENERATION
+# -----------------------------------------
 def generate_participant_id():
-    # Example: P-20251118-7F3A
     date_str = datetime.now().strftime("%Y%m%d")
     short_uid = uuid.uuid4().hex[:4].upper()
     return f"P-{date_str}-{short_uid}"
 
-if "phase" not in st.session_state:
-    st.session_state.phase = "intro"  # "intro", "rating", "done"
+# -----------------------------------------
+# SESSION STATE INITIALIZATION
+# -----------------------------------------
+default_states = {
+    "phase": "intro",
+    "participant_id": None,
+    "track_order": [],
+    "current_track_idx": 0,
+    "start_time": None,
+    "ratings": [],
+    "last_slider_value": None,
+    "slider_value": 0.5,
+    "has_started_track": False,
+    "audio_autoplay": False,
+}
 
-if "participant_id" not in st.session_state:
-    st.session_state.participant_id = None
+for key, val in default_states.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
-if "track_order" not in st.session_state:
-    st.session_state.track_order = []
-
-if "current_track_idx" not in st.session_state:
-    st.session_state.current_track_idx = 0
-
-if "start_time" not in st.session_state:
-    st.session_state.start_time = None
-
-if "ratings" not in st.session_state:
-    st.session_state.ratings = []
-
-if "last_slider_value" not in st.session_state:
-    st.session_state.last_slider_value = None
-
-if "slider_value" not in st.session_state:
-    st.session_state.slider_value = 0.5
-
-
+# -----------------------------------------
+# CONSTANTS
+# -----------------------------------------
 TRACKS = [
     ("Track 1", "buildup01.mp3"),
     ("Track 2", "buildup02.mp3"),
@@ -56,11 +56,17 @@ TRACKS = [
 AUDIO_DIR = "audio"
 DATA_DIR = "data"
 MASTER_CSV = os.path.join(DATA_DIR, "responses_master.csv")
-
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# -----------------------------------------
+# HELPERS
+# -----------------------------------------
+def reset_slider_state():
+    st.session_state.slider_value = 0.5
+    st.session_state.last_slider_value = None
+
+
 def start_experiment():
-    """Initialize session and randomized track order."""
     st.session_state.participant_id = generate_participant_id()
     st.session_state.track_order = TRACKS.copy()
     random.shuffle(st.session_state.track_order)
@@ -68,12 +74,12 @@ def start_experiment():
     st.session_state.phase = "rating"
     st.session_state.start_time = None
     st.session_state.ratings = []
-    st.session_state.last_slider_value = None
-    st.session_state.slider_value = 0.5
+    st.session_state.has_started_track = False
+    st.session_state.audio_autoplay = False
+    reset_slider_state()
 
 
 def save_current_track_ratings():
-    """Save the current track slider data to the master CSV."""
     if not st.session_state.ratings:
         return
 
@@ -84,7 +90,6 @@ def save_current_track_ratings():
     df["participant"] = participant
     df["track_label"] = track_label
     df["track_file"] = filename
-
     df = df[["participant", "track_label", "track_file", "time", "tension_rating"]]
 
     if os.path.exists(MASTER_CSV):
@@ -92,62 +97,50 @@ def save_current_track_ratings():
     else:
         df.to_csv(MASTER_CSV, index=False)
 
-    st.session_state.ratings = []
-    st.session_state.start_time = None
-    st.session_state.last_slider_value = None
-    st.session_state.slider_value = 0.5
-
 
 def record_slider_if_changed():
-    """Log a new sample only when slider value changes."""
     if st.session_state.start_time is None:
         return
 
-    current_value = st.session_state.slider_value
-    last_value = st.session_state.last_slider_value
+    curr = st.session_state.slider_value
+    last = st.session_state.last_slider_value
 
-    if (last_value is None) or (current_value != last_value):
+    if last is None or curr != last:
         elapsed = time.time() - st.session_state.start_time
-        st.session_state.ratings.append({
-            "time": elapsed,
-            "tension_rating": current_value
-        })
-        st.session_state.last_slider_value = current_value
+        st.session_state.ratings.append({"time": elapsed, "tension_rating": curr})
+        st.session_state.last_slider_value = curr
 
 
-# INTRO
+# -----------------------------------------
+# INTRO SCREEN
+# -----------------------------------------
 def render_intro():
     st.title("EDM Tension Perception Test")
 
     st.markdown("""
-    Welcome!  
-    You will listen to **12 EDM build-ups**.  
-    Your task is to continuously rate **how tense the music feels** using a slider.
+    You will listen to **12 EDM build-ups** and continuously rate **musical tension**.
 
-    ### Instructions:
-    1. Click **Begin Experiment**.
-    2. A unique anonymous Participant ID will be assigned automatically.
-    3. Each track will play in a random order.
-    4. For each track:
-        - Press **Play**.
-        - Press **Start Track** when the audio begins.
-        - Move the slider continuously according to your perceived tension.
-        - Press **Finish Track** when the audio ends.
-
-    Try to respond naturally — there are no right or wrong answers.
+    ### NEW streamlined workflow:
+    - The **track loads automatically**
+    - The **slider appears immediately**
+    - **Audio playback begins the moment you touch the slider**
+    - You adjust the slider as tension rises/falls
+    - Click **Finish Track** when the audio ends
     """)
 
     if st.button("Begin Experiment"):
         start_experiment()
 
 
-
-# RATING
+# -----------------------------------------
+# RATING SCREEN (NEW BEHAVIOR)
+# -----------------------------------------
 def render_rating():
-    total_tracks = len(st.session_state.track_order)
     idx = st.session_state.current_track_idx
+    total = len(st.session_state.track_order)
 
-    if idx >= total_tracks:
+    # Finished all
+    if idx >= total:
         st.session_state.phase = "done"
         return
 
@@ -156,88 +149,94 @@ def render_rating():
 
     st.title("EDM Tension Perception Test")
     st.markdown(f"**Participant:** `{st.session_state.participant_id}`")
-    st.markdown(f"**Track {idx + 1} of {total_tracks}** – {track_label}")
+    st.markdown(f"**Track {idx+1}/{total}:** {track_label}")
 
-    st.audio(audio_path)
+    # ----------------------------------------------------
+    # Handle autoplay AFTER slider first movement
+    # ----------------------------------------------------
+    if st.session_state.audio_autoplay:
+        st.audio(audio_path, autoplay=True)
+    else:
+        st.audio(audio_path)
 
-    st.markdown("""
-    ### Instructions for this track:
-    - Press **Play** on the player above.  
-    - When the audio starts, click **Start Track**.  
-    - Move the slider based on how the tension rises or falls.  
-    - When the track ends, click **Finish Track**.
-    """)
+    st.success("Move the slider to begin playback and logging.")
 
-    if st.session_state.start_time is None:
-        if st.button("Start Track"):
+    # ----------------------------------------------------
+    # Slider always visible
+    # ----------------------------------------------------
+    new_slider_value = st.slider(
+        "Tension (low → high)",
+        0.0, 1.0,
+        value=st.session_state.slider_value,
+        step=0.01
+    )
+    st.session_state.slider_value = new_slider_value
+
+    # ----------------------------------------------------
+    # Detect first user interaction → start track + logging
+    # ----------------------------------------------------
+    if not st.session_state.has_started_track:
+        # User moved slider for the first time →
+        if st.session_state.slider_value != 0.5:
             st.session_state.start_time = time.time()
+            st.session_state.has_started_track = True
+            st.session_state.audio_autoplay = True
             st.session_state.ratings = []
             st.session_state.last_slider_value = None
-            st.session_state.slider_value = 0.5
-        return
 
-    st.slider(
-        "Tension (low → high)",
-        min_value=0.0,
-        max_value=1.0,
-        step=0.01,
-        key="slider_value",
-    )
-
-    record_slider_if_changed()
+    # ----------------------------------------------------
+    # Sliding logs after start
+    # ----------------------------------------------------
+    if st.session_state.has_started_track:
+        record_slider_if_changed()
 
     st.caption(f"Recorded samples so far: {len(st.session_state.ratings)}")
 
+    # ----------------------------------------------------
+    # Finish button
+    # ----------------------------------------------------
     if st.button("Finish Track"):
         save_current_track_ratings()
         st.session_state.current_track_idx += 1
+        st.session_state.start_time = None
+        st.session_state.has_started_track = False
+        st.session_state.audio_autoplay = False
+        reset_slider_state()
 
-        if st.session_state.current_track_idx >= total_tracks:
-            st.session_state.phase = "done"
 
-
-
-# UI
+# -----------------------------------------
+# DONE SCREEN
+# -----------------------------------------
 def render_done():
     st.title("Experiment Complete 🎉")
 
     st.markdown(f"""
-    Thank you for participating!  
-    Your anonymous ID was **`{st.session_state.participant_id}`**  
-    Your responses have been securely stored.
+    Thank you!  
+    Participant ID: **`{st.session_state.participant_id}`**
     """)
 
-    st.markdown("---")
-    st.subheader("Admin Panel (for experimenter)")
-
+    st.subheader("Admin Panel")
     if os.path.exists(MASTER_CSV):
-        df_all = pd.read_csv(MASTER_CSV)
-        st.write(f"Total rows collected: `{len(df_all)}`")
-        st.dataframe(df_all.head())
-
-        csv_bytes = df_all.to_csv(index=False).encode("utf-8")
-
+        df = pd.read_csv(MASTER_CSV)
+        st.write(f"Total rows: {len(df)}")
+        st.dataframe(df.head())
         st.download_button(
-            label="Download All Responses as CSV",
-            data=csv_bytes,
-            file_name="responses_master.csv",
-            mime="text/csv",
+            "Download CSV",
+            df.to_csv(index=False).encode("utf-8"),
+            "responses_master.csv",
+            "text/csv",
         )
     else:
-        st.info("No data collected yet.")
+        st.info("No data yet.")
 
-    if st.button("Start a New Participant"):
-        st.session_state.phase = "intro"
-        st.session_state.participant_id = None
-        st.session_state.track_order = []
-        st.session_state.current_track_idx = 0
-        st.session_state.start_time = None
-        st.session_state.ratings = []
-        st.session_state.last_slider_value = None
-        st.session_state.slider_value = 0.5
+    if st.button("Start Another Participant"):
+        for key, val in default_states.items():
+            st.session_state[key] = val
 
 
-# MAIN ROUTER
+# -----------------------------------------
+# ROUTER
+# -----------------------------------------
 if st.session_state.phase == "intro":
     render_intro()
 elif st.session_state.phase == "rating":
