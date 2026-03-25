@@ -306,6 +306,14 @@ def generate_publication_figure(y: np.ndarray, sr: int, data: dict,
 
         for a in axes:
             a.set_facecolor("white")
+            # Major ticks every 2 seconds; minor ticks auto for lighter grid
+            a.xaxis.set_major_locator(mticker.MultipleLocator(2.0))
+            a.xaxis.set_minor_locator(mticker.AutoMinorLocator())
+            # Only vertical grid lines (x-axis) to avoid horizontal lines
+            a.grid(True, which="major", axis="x", color="#7f7f7f",
+                   linestyle="-", linewidth=0.9, alpha=0.6)
+            a.grid(True, which="minor", axis="x", color="#bfbfbf",
+                   linestyle="--", linewidth=0.5, alpha=0.35)
 
         fig.tight_layout()
     return fig
@@ -368,16 +376,25 @@ def generate_matplotlib_overview(df: pd.DataFrame, data: dict, track_name: str =
             ax1.axvline(o, color="#888888", ls="--", lw=0.8, alpha=0.5, 
                         label="Onsets" if first_onset else "")
             first_onset = False
-        ax1.set_ylabel("RMS")
-        ax1.set_title(f"Overview: {track_name}" if track_name else "Overview", fontweight="bold")
-        # Tension
-        ax2.plot(df["time_s"], df["tension"], color="#d62728", lw=1.5)
-        ax2.set_ylabel("Tension Index")
-        ax2.set_xlabel("Time (s)")
-        ax2.set_ylim(0, 1.05)
-        ax2.set_xlim(0, df["time_s"].iloc[-1])
-        ax2.yaxis.set_minor_locator(mticker.AutoMinorLocator())
-        plt.tight_layout()
+    ax1.set_ylabel("RMS")
+    ax1.set_title(f"Overview: {track_name}" if track_name else "Overview", fontweight="bold")
+    # Tension
+    ax2.plot(df["time_s"], df["tension"], color="#d62728", lw=1.5)
+    ax2.set_ylabel("Tension Index")
+    ax2.set_xlabel("Time (s)")
+    ax2.set_ylim(0, 1.05)
+    ax2.set_xlim(0, df["time_s"].iloc[-1])
+    ax2.yaxis.set_minor_locator(mticker.AutoMinorLocator())
+
+    for ax in (ax1, ax2):
+        ax.xaxis.set_major_locator(mticker.MultipleLocator(2.0))
+        ax.xaxis.set_minor_locator(mticker.AutoMinorLocator())
+        ax.grid(True, which="major", axis="x", color="#7f7f7f",
+            linestyle="-", linewidth=0.9, alpha=0.6)
+        ax.grid(True, which="minor", axis="x", color="#bfbfbf",
+            linestyle="--", linewidth=0.5, alpha=0.35)
+
+    plt.tight_layout()
     return fig
 
 
@@ -402,7 +419,13 @@ def generate_matplotlib_features(df: pd.DataFrame, cols: list, ylabel: str, titl
         ax.set_xlim(left=0)
         ax.legend(loc="best", frameon=True, framealpha=0.8)
         ax.yaxis.set_minor_locator(mticker.AutoMinorLocator())
-        plt.tight_layout()
+        ax.xaxis.set_major_locator(mticker.MultipleLocator(2.0))
+        ax.xaxis.set_minor_locator(mticker.AutoMinorLocator())
+    ax.grid(True, which="major", axis="x", color="#7f7f7f",
+        linestyle="-", linewidth=0.9, alpha=0.6)
+    ax.grid(True, which="minor", axis="x", color="#bfbfbf",
+        linestyle="--", linewidth=0.5, alpha=0.35)
+    plt.tight_layout()
     return fig
 
 
@@ -575,6 +598,15 @@ if uploaded is not None:
                 file_name=f"{Path(uploaded.name).stem}_overview.png",
                 mime="image/png",
             )
+            # SVG export
+            buf_svg = io.BytesIO()
+            ov_fig.savefig(buf_svg, format="svg", bbox_inches="tight")
+            st.download_button(
+                label="Download Overview Figure (SVG)",
+                data=buf_svg.getvalue(),
+                file_name=f"{Path(uploaded.name).stem}_overview.svg",
+                mime="image/svg+xml",
+            )
             plt.close(ov_fig)
 
         with tab_norm:
@@ -606,6 +638,15 @@ if uploaded is not None:
                     file_name=f"{Path(uploaded.name).stem}_norm_features.png",
                     mime="image/png",
                 )
+                # SVG export
+                buf_svg = io.BytesIO()
+                norm_fig.savefig(buf_svg, format="svg", bbox_inches="tight")
+                st.download_button(
+                    label="Download Normalized Features (SVG)",
+                    data=buf_svg.getvalue(),
+                    file_name=f"{Path(uploaded.name).stem}_norm_features.svg",
+                    mime="image/svg+xml",
+                )
                 plt.close(norm_fig)
             else:
                 st.info("Pick at least one normalized feature to visualize.")
@@ -634,6 +675,15 @@ if uploaded is not None:
                     data=buf.getvalue(),
                     file_name=f"{Path(uploaded.name).stem}_raw_features.png",
                     mime="image/png",
+                )
+                # SVG export
+                buf_svg = io.BytesIO()
+                raw_fig.savefig(buf_svg, format="svg", bbox_inches="tight")
+                st.download_button(
+                    label="Download Raw Features (SVG)",
+                    data=buf_svg.getvalue(),
+                    file_name=f"{Path(uploaded.name).stem}_raw_features.svg",
+                    mime="image/svg+xml",
                 )
                 plt.close(raw_fig)
             else:
@@ -673,6 +723,16 @@ if uploaded is not None:
             data=buf,
             file_name=f"{Path(uploaded.name).stem}_publication_figure.png",
             mime="image/png",
+        )
+        # offer SVG download for publication
+        buf_svg = io.BytesIO()
+        pub_fig.savefig(buf_svg, format="svg", bbox_inches="tight")
+        buf_svg.seek(0)
+        st.download_button(
+            label="Download publication figure (SVG)",
+            data=buf_svg,
+            file_name=f"{Path(uploaded.name).stem}_publication_figure.svg",
+            mime="image/svg+xml",
         )
         plt.close(pub_fig)
 
