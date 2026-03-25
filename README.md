@@ -45,7 +45,7 @@ These features are normalized and combined into a **Composite Tension Index**.
 
 1.  **Run the Streamlit application:**
     ```bash
-    streamlit run streamlit_app3.py
+    streamlit run Main_Tension_Model.py
     ```
 
 2.  **Analyze Audio:**
