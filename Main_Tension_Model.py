@@ -47,7 +47,7 @@ def moving_average(x: np.ndarray, win: int) -> np.ndarray:
 
 
 def norm_0_1(x: np.ndarray, robust: bool = True) -> np.ndarray:
-    """Normalize array into [0, 1] with NaN-awareness and robust percentile option."""
+    # Normalize array into [0, 1] with NaN-awareness and robust percentile option.
     x = np.asarray(x, dtype=float)
     valid = np.isfinite(x)
     if not valid.any():
@@ -63,7 +63,7 @@ def norm_0_1(x: np.ndarray, robust: bool = True) -> np.ndarray:
     else:
         lo, hi = np.nanmin(xv), np.nanmax(xv)
 
-    # Still degenerate -> return NaNs
+    # Still degenerate to return NaNs
     if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
         out = np.full_like(x, np.nan)
         return out
